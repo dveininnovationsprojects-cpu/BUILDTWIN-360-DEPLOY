@@ -1,0 +1,53 @@
+// BuildTwin 360 - nightly database backup with restore verification (Windows agent with Docker)
+//
+// Create a second Pipeline job from this repo with Script Path "Jenkinsfile.backup".
+// Backups are written outside the workspace so a workspace clean never deletes them.
+
+pipeline {
+    agent any
+
+    triggers {
+        cron('H 2 * * *')   // nightly, around 02:00 (Jenkins spreads the minute)
+    }
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        timeout(time: 20, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '30'))
+    }
+
+    environment {
+        POSTGRES_CONTAINER = 'buildtwin-staging-postgres-1'
+        BACKUP_DIR         = 'C:\\BuildTwinBackups'
+        KEEP_DAYS          = '7'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Backup') {
+            steps {
+                bat 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\backup.ps1 -Container %POSTGRES_CONTAINER% -BackupDir "%BACKUP_DIR%" -KeepDays %KEEP_DAYS%'
+            }
+        }
+
+        stage('Verify Restore') {
+            steps {
+                bat 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-restore.ps1 -Container %POSTGRES_CONTAINER% -BackupDir "%BACKUP_DIR%"'
+            }
+        }
+    }
+
+    post {
+        success {
+            // Keep the small verification record with the build; the dump itself stays in BACKUP_DIR
+            bat 'copy /Y "%BACKUP_DIR%\\restore-verification-*.txt" . >nul 2>&1 & exit /b 0'
+            archiveArtifacts artifacts: 'restore-verification-*.txt', allowEmptyArchive: true
+        }
+    }
+}

@@ -94,9 +94,22 @@ pipeline {
                 }
             }
         }
+
+        stage('API Smoke Tests (Newman)') {
+            steps {
+                // Runs inside the compose network so it reaches the backend directly
+                bat '''
+                    if exist postman\\newman-results.xml del postman\\newman-results.xml
+                    docker run --rm --network buildtwin-staging_default -v "%WORKSPACE%\\postman:/etc/newman" postman/newman:alpine run staging-smoke.postman_collection.json --env-var base_url=http://backend:8080 --reporters cli,junit --reporter-junit-export /etc/newman/newman-results.xml
+                '''
+            }
+        }
     }
 
     post {
+        always {
+            junit allowEmptyResults: true, testResults: 'postman/newman-results.xml'
+        }
         success {
             echo "Staging deployed: app http://localhost:${env.FRONTEND_PORT}  Swagger http://localhost:${env.BACKEND_PORT}/swagger-ui.html"
         }

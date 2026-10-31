@@ -1,3 +1,5 @@
 /backend/
 /frontend/
 .env
+/backups/
+postman/newman-results.xml
