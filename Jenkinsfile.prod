@@ -1,0 +1,111 @@
+// BuildTwin 360 - production deploy pipeline (Linux VM over SSH). Not run yet: no production VM exists.
+//
+// Create a separate Pipeline job from this repo with Script Path "Jenkinsfile.prod".
+// Jenkins prerequisites:
+//   * OpenSSH client on the Jenkins agent (ssh)
+//   * Credential (Kind: SSH Username with private key)   buildtwin-prod-ssh
+//   * Credential (Kind: Secret text)                     buildtwin-prod-domain          -> e.g. buildtwin.example.com
+//   * Credential (Kind: Secret text)                     buildtwin-prod-admin-password  -> same as APP_SEED_ADMIN_PASSWORD
+// The VM needs the setup in docs/PRODUCTION_RUNBOOK.md (Docker, this repo cloned to /opt/buildtwin, prod/.env.prod).
+
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        timeout(time: 45, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '30'))
+    }
+
+    parameters {
+        string(name: 'BACKEND_REF', defaultValue: '', description: 'Backend tag or branch to release (use a tag, not main2)')
+        string(name: 'FRONTEND_REF', defaultValue: '', description: 'Frontend tag or branch to release (use a tag, not main2)')
+        string(name: 'PROD_HOST', defaultValue: '', description: 'Production VM host name or IP')
+    }
+
+    environment {
+        DEPLOY_DIR = '/opt/buildtwin'
+    }
+
+    stages {
+        stage('Validate') {
+            steps {
+                script {
+                    if (!params.BACKEND_REF?.trim() || !params.FRONTEND_REF?.trim() || !params.PROD_HOST?.trim()) {
+                        error 'BACKEND_REF, FRONTEND_REF and PROD_HOST are required'
+                    }
+                }
+            }
+        }
+
+        stage('Checkout Deploy Config') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Approval') {
+            steps {
+                // Nothing reaches production without a named person approving this exact version
+                input message: "Deploy backend ${params.BACKEND_REF} and frontend ${params.FRONTEND_REF} to PRODUCTION (${params.PROD_HOST})?",
+                      ok: 'Deploy to production'
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                withCredentials([sshUserPrivateKey(credentialsId: 'buildtwin-prod-ssh', keyFileVariable: 'KEY', usernameVariable: 'SSH_USER')]) {
+                    // The VM updates its own clone of this repo, takes a backup, builds and starts the stack
+                    bat 'ssh -i "%KEY%" -o StrictHostKeyChecking=accept-new %SSH_USER%@%PROD_HOST% "cd %DEPLOY_DIR% && git fetch origin && git reset --hard origin/main && chmod +x prod/*.sh && prod/deploy.sh %BACKEND_REF% %FRONTEND_REF%"'
+                }
+            }
+        }
+
+        stage('Production Smoke Test') {
+            steps {
+                withCredentials([string(credentialsId: 'buildtwin-prod-domain', variable: 'DOMAIN')]) {
+                    bat 'curl --fail --silent --show-error --retry 20 --retry-delay 5 --retry-connrefused --retry-all-errors -o NUL https://%DOMAIN%/'
+                    script {
+                        // Without a login token the API must answer 401 through the TLS proxy
+                        def code = bat(returnStdout: true,
+                                script: '@curl --silent -o NUL -w "%%{http_code}" https://%DOMAIN%/api/v1/projects').trim()
+                        if (code != '401') {
+                            error "Expected 401 from /api/v1/projects, got ${code}"
+                        }
+                        // The backend must not be reachable from outside the VM
+                        def direct = bat(returnStdout: true,
+                                script: '@curl --silent --max-time 5 -o NUL -w "%%{http_code}" http://%DOMAIN%:8080/v3/api-docs').trim()
+                        if (direct == '200') {
+                            error 'Backend port 8080 is reachable from the internet'
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('API Smoke Tests (Newman)') {
+            steps {
+                withCredentials([string(credentialsId: 'buildtwin-prod-domain', variable: 'DOMAIN'),
+                                 string(credentialsId: 'buildtwin-prod-admin-password', variable: 'ADMIN_PASSWORD')]) {
+                    bat '''
+                        if exist postman\\newman-results.xml del postman\\newman-results.xml
+                        docker run --rm -v "%WORKSPACE%\\postman:/etc/newman" postman/newman:alpine run staging-smoke.postman_collection.json --env-var base_url=https://%DOMAIN% --env-var admin_password=%ADMIN_PASSWORD% --reporters cli,junit --reporter-junit-export /etc/newman/newman-results.xml
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            junit allowEmptyResults: true, testResults: 'postman/newman-results.xml'
+        }
+        success {
+            echo "Production deployed: backend ${params.BACKEND_REF}, frontend ${params.FRONTEND_REF}. Record this build in the Deployment Execution Record."
+        }
+        failure {
+            echo 'Production deployment failed. Roll back with the Rollback Procedure: run this job again with the previous tags.'
+        }
+    }
+}
