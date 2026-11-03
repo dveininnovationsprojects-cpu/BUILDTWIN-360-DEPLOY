@@ -83,3 +83,7 @@ A backup that lives only on the staging host is lost with the host. Set `OFFSITE
 share (`\nas01\buildtwin`) or a synced cloud folder. After each dump the script copies it there,
 compares the SHA-256 of both files and fails the job if they differ. Old dumps in that folder are
 removed after `KEEP_DAYS` days. The Jenkins service account needs write access to that location.
+
+**Staging setting:** `OFFSITE_DIR` is `C:\Users\91822\OneDrive\BuildTwinBackups`. The Jenkins service (LocalSystem) writes
+the copy there and the OneDrive client uploads it. The dumps contain project data and password hashes, so for
+production use a company-controlled location instead of a personal OneDrive.
