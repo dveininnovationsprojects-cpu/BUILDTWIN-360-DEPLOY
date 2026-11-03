@@ -1,6 +1,6 @@
 # BuildTwin 360 - staging stack (PostgreSQL + backend + frontend)
 # The Jenkins staging pipeline checks the app repos out into ./backend and ./frontend
-# and supplies POSTGRES_PASSWORD and JWT_SECRET_KEY from Jenkins credentials.
+# and supplies POSTGRES_PASSWORD, JWT_SECRET_KEY and APP_SEED_ADMIN_PASSWORD from Jenkins credentials.
 
 name: buildtwin-staging
 
@@ -31,6 +31,8 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY}
+      # Overrides app.seed.admin.password (default Admin@123) so staging has no well-known admin login
+      APP_SEED_ADMIN_PASSWORD: ${APP_SEED_ADMIN_PASSWORD:?Set APP_SEED_ADMIN_PASSWORD}
       SPRING_JPA_SHOW_SQL: "false"
     ports:
       - "${BACKEND_PORT:-8082}:8080"   # Swagger UI: /swagger-ui.html

@@ -21,6 +21,9 @@ pipeline {
         POSTGRES_CONTAINER = 'buildtwin-staging-postgres-1'
         BACKUP_DIR         = 'C:\\BuildTwinBackups'
         KEEP_DAYS          = '7'
+        // Second copy on another disk, network share or synced folder, e.g. '\\nas01\buildtwin' or 'D:\BuildTwinBackups'.
+        // Leave empty to keep only the local copy (not recommended: it is lost with the host).
+        OFFSITE_DIR        = ''
     }
 
     stages {
@@ -32,7 +35,7 @@ pipeline {
 
         stage('Backup') {
             steps {
-                bat 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\backup.ps1 -Container %POSTGRES_CONTAINER% -BackupDir "%BACKUP_DIR%" -KeepDays %KEEP_DAYS%'
+                bat 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\backup.ps1 -Container %POSTGRES_CONTAINER% -BackupDir "%BACKUP_DIR%" -KeepDays %KEEP_DAYS% -OffsiteDir "%OFFSITE_DIR%"'
             }
         }
 

@@ -75,3 +75,11 @@ record the new result here before sign-off.
 - Backups live on the same machine as the database. Copy `C:\BuildTwinBackups` to separate storage
   (another disk, network share or cloud bucket) to survive a host failure.
 - The check covers schema and row counts, not application-level correctness of the data.
+
+## Off-host copy
+
+A backup that lives only on the staging host is lost with the host. Set `OFFSITE_DIR` in
+`Jenkinsfile.backup` (or pass `-OffsiteDir` to `scripts/backup.ps1`) to a second disk, a network
+share (`\nas01\buildtwin`) or a synced cloud folder. After each dump the script copies it there,
+compares the SHA-256 of both files and fails the job if they differ. Old dumps in that folder are
+removed after `KEEP_DAYS` days. The Jenkins service account needs write access to that location.

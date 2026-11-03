@@ -3,8 +3,14 @@
 param(
     [string]$Container = 'buildtwin-staging-postgres-1',
     [string]$BackupDir = (Join-Path $PSScriptRoot '..\backups'),
-    [int]$KeepDays = 7
+    [int]$KeepDays = 7,
+    # Optional second location on another disk, network share or synced cloud folder.
+    # When set, the dump is copied there and the copy is verified; failure fails the backup.
+    [string]$OffsiteDir = ''
 )
+
+# cmd.exe passes an empty "" argument through literally
+$OffsiteDir = $OffsiteDir.Trim('"').Trim()
 
 function Invoke-Docker {
     param([string[]]$DockerArgs)
@@ -39,5 +45,18 @@ if (-not (Test-Path $target) -or (Get-Item $target).Length -eq 0) { throw "Backu
 Get-ChildItem -Path $BackupDir -Filter 'buildtwin-*.dump' |
     Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-$KeepDays) } |
     Remove-Item -Force
+
+if ($OffsiteDir) {
+    New-Item -ItemType Directory -Force -Path $OffsiteDir | Out-Null
+    $copy = Join-Path $OffsiteDir $name
+    Copy-Item -Path $target -Destination $copy -Force
+    $a = (Get-FileHash -Path $target -Algorithm SHA256).Hash
+    $b = (Get-FileHash -Path $copy -Algorithm SHA256).Hash
+    if ($a -ne $b) { throw "Off-host copy does not match the original: $copy" }
+    Get-ChildItem -Path $OffsiteDir -Filter 'buildtwin-*.dump' |
+        Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-$KeepDays) } |
+        Remove-Item -Force
+    Write-Output ("OFFSITE_OK {0} (sha256 {1})" -f $copy, $a)
+}
 
 Write-Output ("BACKUP_OK {0} ({1:N0} bytes)" -f $target, (Get-Item $target).Length)
