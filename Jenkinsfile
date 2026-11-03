@@ -61,13 +61,15 @@ pipeline {
 
         stage('Add Docker Files') {
             steps {
+                // Copy a file unless the app repo tracks its own version. "if not exist" is not enough:
+                // the workspace is reused, so a copy from an earlier build would never be refreshed.
                 bat '''
-                    if not exist backend\\Dockerfile copy /Y docker\\backend\\Dockerfile backend\\Dockerfile
-                    if not exist backend\\.dockerignore copy /Y docker\\backend\\.dockerignore backend\\.dockerignore
-                    if not exist frontend\\Dockerfile copy /Y docker\\frontend\\Dockerfile frontend\\Dockerfile
-                    if not exist frontend\\.dockerignore copy /Y docker\\frontend\\.dockerignore frontend\\.dockerignore
-                    if not exist frontend\\nginx.conf copy /Y docker\\frontend\\nginx.conf frontend\\nginx.conf
-                    if not exist frontend\\security-headers.inc copy /Y docker\\frontend\\security-headers.inc frontend\\security-headers.inc
+                    git -C backend ls-files --error-unmatch Dockerfile >nul 2>&1 || copy /Y docker\\backend\\Dockerfile backend\\Dockerfile
+                    git -C backend ls-files --error-unmatch .dockerignore >nul 2>&1 || copy /Y docker\\backend\\.dockerignore backend\\.dockerignore
+                    git -C frontend ls-files --error-unmatch Dockerfile >nul 2>&1 || copy /Y docker\\frontend\\Dockerfile frontend\\Dockerfile
+                    git -C frontend ls-files --error-unmatch .dockerignore >nul 2>&1 || copy /Y docker\\frontend\\.dockerignore frontend\\.dockerignore
+                    git -C frontend ls-files --error-unmatch nginx.conf >nul 2>&1 || copy /Y docker\\frontend\\nginx.conf frontend\\nginx.conf
+                    git -C frontend ls-files --error-unmatch security-headers.inc >nul 2>&1 || copy /Y docker\\frontend\\security-headers.inc frontend\\security-headers.inc
                     exit /b 0
                 '''
             }
@@ -138,7 +140,7 @@ pipeline {
                     bat '''
                         if not exist reports mkdir reports
                         docker run --rm --network buildtwin-staging_default -v "%WORKSPACE%\\reports:/zap/wrk:rw" ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t http://frontend:80 -r zap-baseline.html -I
-                        docker run --rm --network buildtwin-staging_default -v "%WORKSPACE%\\reports:/zap/wrk:rw" ghcr.io/zaproxy/zaproxy:stable zap-api-scan.py -t http://backend:8080/v3/api-docs -f openapi -r zap-api.html -I
+                        docker run --rm --network buildtwin-staging_default -v "%WORKSPACE%\\reports:/zap/wrk:rw" ghcr.io/zaproxy/zaproxy:stable zap-api-scan.py -t http://backend:8080/v3/api-docs -f openapi -r zap-api.html -I -P 8091 -T 3
                     '''
                 }
             }
