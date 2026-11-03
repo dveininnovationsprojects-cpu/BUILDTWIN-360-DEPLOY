@@ -1,8 +1,13 @@
-# Request for the frontend developers: coverage threshold
+# Request for the frontend developers: raise test coverage
 
-Frontend test coverage is 0.48% (KTI-11). The Jenkins job now publishes the HTML report
-("Frontend Coverage" on the job page). To stop coverage from falling and to raise it step by step,
-please change `coverage` in `vite.config.js` (frontend repo, `BUILDTWIN-360-FRONTEND`):
+**Current state (Jenkins build #8, 3 November 2026):** 4 tests in 2 files, coverage **0.42%**
+(181 of 42,967 lines). This is tracked as KTI-11 in the Known Technical Issues Register.
+The Jenkins job publishes the HTML report as "Frontend Coverage" on the job page, so you can see
+which files have no tests.
+
+## 1. Add a coverage threshold in `vite.config.js`
+
+Repo: `BUILDTWIN-360-FRONTEND`. Replace the `coverage` block inside `test`:
 
 ```js
 coverage: {
@@ -11,16 +16,33 @@ coverage: {
   reportsDirectory: './coverage',
   include: ['src/**/*.{js,jsx,ts,tsx}'],
   exclude: ['src/**/*.test.*', 'src/test/**', 'src/main.jsx', 'src/types/**', 'src/assets/**'],
-  thresholds: { lines: 20, functions: 20, branches: 20, statements: 20 },
+  thresholds: { lines: 0, functions: 0, branches: 0, statements: 0 },
 },
 ```
 
-Notes:
+Important: the CI build fails when coverage is below the thresholds. Today it is 0.42%, so
+**do not set 20 yet**, or the pipeline goes red. Start at 0 (this only locks in the reporting), then raise
+the numbers in the same pull request that brings coverage above them:
 
-- `include` makes v8 count files that no test imports, so the reported figure becomes the real one
-  (it may be lower than 0.48% at first).
-- The build fails when coverage is below the thresholds. Merge the tests first, or start the
-  thresholds at the current real value and raise them by 10 points each sprint
-  (20, 30, 40, 50).
-- Suggested order of tests: design-system components, stores and utils, `lib/apiClient.jsx`
-  and services, `ProtectedRoute`, then one smoke test per module page.
+| Sprint | Threshold |
+|--------|-----------|
+| now    | 0         |
+| +1     | 10        |
+| +2     | 20        |
+| +3     | 30        |
+| +4     | 40, then 50 |
+
+## 2. Write the tests (suggested order)
+
+1. Design-system components (`src/design-system/components/*`), following `Button.test.jsx`.
+2. Stores and utilities.
+3. `lib/apiClient.jsx` and the services (mock the API with MSW).
+4. `ProtectedRoute` and role checks.
+5. One smoke test per module page (render, loading, empty and error states).
+6. Authentication, projects, DPR, materials and cost flows with Testing Library.
+
+## 3. Definition of done
+
+- `npm run test:coverage` passes locally and in Jenkins.
+- The threshold in `vite.config.js` is raised to just below the new coverage.
+- KTI-11 is updated with the new percentage.

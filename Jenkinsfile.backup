@@ -23,9 +23,9 @@ pipeline {
         KEEP_DAYS          = '7'
         // Second copy on another disk, network share or synced folder, e.g. '\\nas01\buildtwin' or 'D:\BuildTwinBackups'.
         // Leave empty to keep only the local copy (not recommended: it is lost with the host).
-        // Currently a second folder on C: (this machine has no other drive). It protects against a deleted or
-        // corrupted backup folder, not against losing the machine; point it at a network share or synced folder later.
-        OFFSITE_DIR        = 'C:\\BuildTwinBackups-Copy'
+        // A folder inside the OneDrive folder, so the OneDrive client uploads each copy to the cloud. The Jenkins
+        // service runs as LocalSystem and writes to this path directly; the OneDrive client (running as the user) syncs it.
+        OFFSITE_DIR        = 'C:\\Users\\91822\\OneDrive\\BuildTwinBackups'
     }
 
     stages {
