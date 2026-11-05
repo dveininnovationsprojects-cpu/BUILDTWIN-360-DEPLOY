@@ -20,6 +20,10 @@ coverage: {
 },
 ```
 
+**The `include` line is required since the upgrade to vitest 4.** Vitest 4 only counts files that a test
+loads. Without `include`, the current build reports 50% (10 of 20 lines), which hides the real figure of
+about 0.4% for the whole `src` folder. Keep `include` so the number is honest.
+
 Important: the CI build fails when coverage is below the thresholds. Today it is 0.42%, so
 **do not set 20 yet**, or the pipeline goes red. Start at 0 (this only locks in the reporting), then raise
 the numbers in the same pull request that brings coverage above them:
